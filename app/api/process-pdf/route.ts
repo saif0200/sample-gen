@@ -36,7 +36,7 @@ export async function POST(req: NextRequest) {
         const result = await client.models.generateContent({
             model: 'gemini-flash-lite-latest',
             config: {
-                temperature: 0.2,
+                temperature: 0.7,
             },
             contents: [
                 {
@@ -49,7 +49,21 @@ export async function POST(req: NextRequest) {
                             },
                         },
                         {
-                            text: 'Using the exam sample I provided, generate a new exam with entirely new questions while replicating the original format exactly—including fonts, spacing, layout, page breaks, headers, footers, and numbering. Produce the full Overleaf-ready LaTeX code that recreates the exact style, and output only the LaTeX code, with no additional explanation or commentary. Very heavy emphasis on keeping the same format, do not create your own',
+                            text: `You are a University Exam Creator specializing in generating diverse practice materials.
+
+Your Task: Analyze the provided LaTeX exam to understand the syllabus and difficulty level, then generate a fresh, original sample paper that covers the same topics but offers a completely different practice experience.
+
+Strict Generation Rules:
+
+Topic Parity, Not Question Cloning: For each question, identify the general topic (e.g., "Integration by Parts," "Eigenvalues"). Generate a distinctly new problem for that topic.
+
+Constraint: Do not just change the numbers. If the original used a trigonometric function, use an exponential or polynomial one. If the original asked for a calculation, ask for a conceptual application or a different case.
+
+Maintain Complexity: The new questions must require a similar depth of knowledge and time to solve, even if the problem type looks different.
+
+Preserve Structure: Keep the exact LaTeX preamble, point values, and section layout of the original file so it compiles identically.
+
+Output Requirement: Return ONLY the raw, Overleaf-ready LaTeX source code.`,
                         },
                     ],
                 },

@@ -149,13 +149,17 @@ export default function Home() {
   };
 
   return (
-    <div className="relative flex min-h-screen flex-col items-center justify-center px-4 font-sans text-zinc-900 dark:text-zinc-100">
+    <div className="relative flex min-h-screen flex-col items-center justify-center px-4 font-sans text-zinc-900 dark:text-zinc-100 overflow-y-scroll">
       <AnimatedBackground />
 
-      <main className={cn(
-        "w-full relative z-10 transition-all duration-700 ease-[cubic-bezier(0.16,1,0.3,1)]",
-        status === 'success' ? "max-w-3xl" : "max-w-xl"
-      )}>
+      <motion.main
+        className="w-full relative z-10 flex flex-col"
+        initial={false}
+        animate={{
+          maxWidth: status === 'success' ? 768 : 576
+        }}
+        transition={{ duration: 0.7, ease: [0.16, 1, 0.3, 1] }}
+      >
 
         <motion.div
           initial={{ opacity: 0, scale: 1.05 }}
@@ -166,36 +170,39 @@ export default function Home() {
             {status !== 'success' && (
               <motion.div
                 key="header"
-                initial={{ opacity: 0, height: 0, marginBottom: 0 }}
-                animate={{ opacity: 1, height: 'auto', marginBottom: 48 }}
-                exit={{ opacity: 0, height: 0, marginBottom: 0 }}
-                transition={{ type: "spring", stiffness: 260, damping: 20 }}
-                className="text-center space-y-4 overflow-hidden pt-2"
+                initial={{ opacity: 0, y: -10, height: 0, marginBottom: 0 }}
+                animate={{ opacity: 1, y: 0, height: 'auto', marginBottom: 48 }}
+                exit={{ opacity: 0, y: -10, height: 0, marginBottom: 0 }}
+                transition={{ duration: 0.7, ease: [0.16, 1, 0.3, 1] }}
+                className="w-full text-center overflow-hidden"
               >
-                <div className="inline-flex items-center justify-center p-3 mb-4 rounded-2xl bg-white/50 dark:bg-black/50 backdrop-blur-md shadow-sm ring-1 ring-zinc-900/5 dark:ring-zinc-100/10">
-                  <Sparkles className="h-6 w-6 text-indigo-500 mr-2" />
-                  <span className="font-semibold bg-gradient-to-r from-indigo-500 to-purple-600 bg-clip-text text-transparent">AI Exam Generator</span>
+                <div className="pt-2 space-y-4">
+                  <div className="inline-flex items-center justify-center p-3 mb-4 rounded-2xl bg-white/50 dark:bg-black/50 backdrop-blur-md shadow-sm ring-1 ring-zinc-900/5 dark:ring-zinc-100/10">
+                    <Sparkles className="h-6 w-6 text-indigo-500 mr-2" />
+                    <span className="font-semibold bg-gradient-to-r from-indigo-500 to-purple-600 bg-clip-text text-transparent">AI Exam Generator</span>
+                  </div>
+                  <h1 className="text-3xl font-bold tracking-tight text-zinc-800 dark:text-zinc-100 whitespace-nowrap">
+                    Transform your exams in seconds.
+                  </h1>
+                  <p className="text-lg text-zinc-600 dark:text-zinc-400 max-w-lg mx-auto">
+                    Upload a past exam PDF. Our AI will analyze the structure and generate a fresh, unique version instantly.
+                  </p>
                 </div>
-                <h1 className="text-3xl font-bold tracking-tight text-zinc-800 dark:text-zinc-100 whitespace-nowrap">
-                  Transform your exams in seconds.
-                </h1>
-                <p className="text-lg text-zinc-600 dark:text-zinc-400 max-w-lg mx-auto">
-                  Upload a past exam PDF. Our AI will analyze the structure and generate a fresh, unique version instantly.
-                </p>
               </motion.div>
             )}
           </AnimatePresence>
 
           {/* Main Card (Form or Preview) */}
           <motion.div
-            layout
+            initial={false}
+            animate={{ height: status === 'success' ? '75vh' : 500 }}
             transition={{ duration: 0.7, ease: [0.16, 1, 0.3, 1] }}
-            className="overflow-hidden rounded-3xl bg-white/80 dark:bg-zinc-900/80 backdrop-blur-xl shadow-2xl ring-1 ring-zinc-900/5 dark:ring-zinc-100/10"
+            className="w-full overflow-hidden rounded-3xl bg-white/80 dark:bg-zinc-900/80 backdrop-blur-xl shadow-2xl ring-1 ring-zinc-900/5 dark:ring-zinc-100/10"
           >
-            <motion.div
-              layout
+            <div
               className={cn(
-                status === 'success' ? "p-0" : "p-6 md:p-8 h-[500px] flex flex-col justify-center"
+                "h-full transition-[padding] duration-700 ease-[cubic-bezier(0.16,1,0.3,1)]",
+                status === 'success' ? "p-0" : "p-6 md:p-8 flex flex-col justify-center"
               )}
             >
               <AnimatePresence mode="popLayout" initial={false}>
@@ -324,7 +331,7 @@ export default function Home() {
                     key="success-preview"
                     initial={{ opacity: 0 }}
                     animate={{ opacity: 1 }}
-                    exit={{ opacity: 0 }}
+                    exit={{ opacity: 0, transition: { duration: 0.3 } }}
                     transition={{ duration: 0.5, delay: 0.2, ease: "easeOut" }}
                     className="w-full h-full"
                   >
@@ -363,18 +370,29 @@ export default function Home() {
                 )}
 
               </AnimatePresence>
-            </motion.div>
+            </div>
           </motion.div>
 
           {/* Action Buttons (Below Container) */}
           <AnimatePresence>
             {status === 'success' && (
               <motion.div
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: 20 }}
+                initial={{ opacity: 0, y: 20, height: 0, marginTop: 0 }}
+                animate={{ opacity: 1, y: 0, height: 'auto', marginTop: 24 }}
+                exit={{
+                  opacity: 0,
+                  y: 10,
+                  height: 0,
+                  marginTop: 0,
+                  transition: {
+                    opacity: { duration: 0.2 },
+                    y: { duration: 0.7, ease: [0.16, 1, 0.3, 1] },
+                    height: { duration: 0.7, ease: [0.16, 1, 0.3, 1] },
+                    marginTop: { duration: 0.7, ease: [0.16, 1, 0.3, 1] }
+                  }
+                }}
                 transition={{ duration: 0.7, ease: [0.16, 1, 0.3, 1] }}
-                className="mt-6 flex flex-col items-center gap-6"
+                className="w-full flex flex-col items-center gap-6 overflow-hidden"
               >
                 <div className="flex items-center gap-2 rounded-full bg-green-100/50 backdrop-blur-md px-4 py-2 text-sm font-medium text-green-700 ring-1 ring-green-700/10 dark:bg-green-900/30 dark:text-green-300 dark:ring-green-400/20">
                   <CheckCircle className="h-4 w-4" />
@@ -426,7 +444,7 @@ export default function Home() {
           </motion.p>
 
         </motion.div> {/* End stagger wrapper */}
-      </main>
-    </div>
+      </motion.main>
+    </div >
   );
 }
