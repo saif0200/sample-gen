@@ -11,10 +11,10 @@ const execAsync = promisify(exec);
 export async function POST(req: NextRequest) {
     try {
         const formData = await req.formData();
-        const file = formData.get('file') as File;
+        const files = formData.getAll('file') as File[];
 
-        if (!file) {
-            return NextResponse.json({ error: 'No file uploaded' }, { status: 400 });
+        if (!files || files.length === 0) {
+            return NextResponse.json({ error: 'No files uploaded' }, { status: 400 });
         }
 
         const apiKey = process.env.GOOGLE_GENAI_API_KEY || process.env.GOOGLE_API_KEY;
@@ -22,71 +22,114 @@ export async function POST(req: NextRequest) {
             return NextResponse.json({ error: 'Missing API Key' }, { status: 500 });
         }
 
-        // Convert file to base64
-        const arrayBuffer = await file.arrayBuffer();
-        const buffer = Buffer.from(arrayBuffer);
-        const base64Data = buffer.toString('base64');
+        // Convert all files to base64 and create inline data parts
+        const pdfParts = await Promise.all(
+            files.map(async (file) => {
+                const arrayBuffer = await file.arrayBuffer();
+                const buffer = Buffer.from(arrayBuffer);
+                return {
+                    inlineData: {
+                        mimeType: 'application/pdf',
+                        data: buffer.toString('base64'),
+                    },
+                };
+            })
+        );
 
         // Initialize Gemini using @google/genai
         const client = new GoogleGenAI({ apiKey });
 
-        console.log('Generating content with Gemini...');
+        console.log(`Generating content with Gemini from ${files.length} PDF(s)...`);
 
         // Correct usage for @google/genai
         const result = await client.models.generateContent({
-            model: 'gemini-flash-lite-latest',
+            model: 'gemini-3-flash-preview',
             config: {
-                temperature: 0.7,
+                temperature: 0.4,
+                thinkingConfig: {
+                    // @ts-expect-error: Library types do not yet support MINIMAL
+                    thinkingLevel: 'MINIMAL'
+                },
             },
             contents: [
                 {
                     role: 'user',
                     parts: [
+                        ...pdfParts,
                         {
-                            inlineData: {
-                                mimeType: 'application/pdf',
-                                data: base64Data,
-                            },
-                        },
-                        {
-                            text: `You are a University Exam Creator specializing in generating diverse practice materials.
+                            text: `You are an elite Professor creating a rigorous practice exam.
 
-Your Task: Analyze the provided LaTeX exam to understand the syllabus and difficulty level, then generate a fresh, original sample paper that covers the same topics but offers a completely different practice experience.
+### CONTEXT
+The student has ALREADY SOLVED all questions in the provided PDF(s). They are running out of practice material and strictly need NEW challenges.
+Your job is to generate a fresh exam that tests the same concepts to verify true mastery, not just memorization of the old questions.
 
-Strict Generation Rules:
+### MISSION
+Create ONE SINGLE, UNIFIED practice exam that synthesizes concepts from ALL provided PDF(s).
+The resulting exam must be a seamless integration of topics, appearing as if it were the "next year's" or "final" version of the provided exams.
 
-Topic Parity, Not Question Cloning: For each question, identify the general topic (e.g., "Integration by Parts," "Eigenvalues"). Generate a distinctly new problem for that topic.
+### CRITICAL RULES
+1. **Single Unified Exam**: Regardless of the number of input files, generate exactly ONE exam document. Do NOT separate the exam into "File 1" and "File 2" sections. The questions should flow logically by topic, not by source file.
+2. **Deep Synthesis**:
+   - Analyze ALL files to build a holistic understanding of the subject matter.
+   - If files have overlapping content, merge them into deeper, more complex questions rather than repeating simple concepts.
+   - Ensure NO overlapping or redundant questions. Each problem must test a distinct aspect of the combined, comprehensive syllabus.
+3. **Novelty & Rigor**:
+   - **Anti-Repetition**: Since the student has seen the original questions, any similarity will be spotted immediately. AVOID superficial rephrasing.
+   - Create BRAND NEW questions. Change contexts, function types (e.g., trig → exp), and variables.
+   - **Increase Complexity**: NEVER make a question easier. If in doubt, increase complexity slightly.
+   - **Master Logic**: Focus on testing the underlying principles.
+4. **Formatting mimicry**:
+   - **Maintain Format**: Detect and COPY the exact formatting style, layout, and structure of the input PDF(s). Do NOT add new headers, title pages, or sections unless they exist in the source.
+   - **No MCQ Splits**: Wrap EACH MCQ block and its options in a \\begin{minipage}{\\linewidth} ... \\end{minipage} to prevent page breaks.
+   - No hints, specific advice, or conversational filler. ONLY the exam content.
 
-Constraint: Do not just change the numbers. If the original used a trigonometric function, use an exponential or polynomial one. If the original asked for a calculation, ask for a conceptual application or a different case.
-
-Maintain Complexity: The new questions must require a similar depth of knowledge and time to solve, even if the problem type looks different.
-
-Preserve Structure: Keep the exact LaTeX preamble, point values, and section layout of the original file so it compiles identically.
-
-Output Requirement: Return ONLY the raw, Overleaf-ready LaTeX source code.`,
+### OUTPUT REQUIREMENTS
+- Return **ONLY** valid, standalone LaTeX code.
+- Start strictly with \\documentclass and end with \\end{document}.
+- Do NOT include markdown code blocks (like \`\`\`latex) or introductory text.`
                         },
                     ],
                 },
             ],
         });
 
-        // Handle response structure for @google/genai (v0.x vs v1.x)
-        // Cast to any to avoid TS errors while handling multiple potential partial structures
+        // Handle response logic
         const r = result as any;
-        const responseText =
+        let responseText =
             typeof r.text === 'function' ? r.text() :
                 r.response?.text?.() ||
                 r.candidates?.[0]?.content?.parts?.[0]?.text ||
-                JSON.stringify(result);
+                '';
 
-        console.log('Gemini response received.');
+        console.log('Gemini response received. Length:', responseText.length);
 
-        // Extract LaTeX content (simple heuristic)
-        // Sometimes Gemini wraps code in ```latex ... ```
-        let texContent = responseText;
-        const codeBlockMatch = responseText.match(/```(?:latex|tex)?\n([\s\S]*?)\n```/i);
+        // Robust LaTeX Extraction
+        let texContent = responseText.trim();
+
+        // Strategy 1: Look for markdown code blocks
+        const codeBlockMatch = responseText.match(/```(?:latex|tex)?\n?([\s\S]*?)```/i);
         if (codeBlockMatch) {
-            texContent = codeBlockMatch[1];
+            texContent = codeBlockMatch[1].trim();
+        } else {
+            // Strategy 2: Find the main LaTeX document structure
+            const docMatch = responseText.match(/(\\documentclass[\s\S]*?\\end\{document\})/i);
+            if (docMatch) {
+                texContent = docMatch[1].trim();
+            }
+        }
+
+        // Final cleanup of extra chatter that might be outside backticks or doc
+        if (!texContent.startsWith('\\documentclass')) {
+            const startIdx = texContent.indexOf('\\documentclass');
+            if (startIdx !== -1) {
+                texContent = texContent.substring(startIdx);
+            }
+        }
+        if (!texContent.endsWith('\\end{document}')) {
+            const endIdx = texContent.lastIndexOf('\\end{document}');
+            if (endIdx !== -1) {
+                texContent = texContent.substring(0, endIdx + 14);
+            }
         }
 
         // Save to temp file
@@ -103,9 +146,6 @@ Output Requirement: Return ONLY the raw, Overleaf-ready LaTeX source code.`,
         // Attempt to compile with pdflatex
         try {
             console.log(`Compiling TeX at ${texFilePath}...`);
-            // Run pdflatex twice to resolve references if needed, but once is usually enough for simple docs
-            // Use -interaction=nonstopmode to prevent hanging on errors
-            // Ensure PATH includes the MacTeX/BasicTeX binary locations
             await execAsync(`pdflatex -interaction=nonstopmode -output-directory="${tempDir}" "${texFilePath}"`, {
                 env: {
                     ...process.env,
@@ -123,12 +163,6 @@ Output Requirement: Return ONLY the raw, Overleaf-ready LaTeX source code.`,
             console.error('PDF Compilation failed:', compileError);
             pdfError = 'PDF compilation failed: ' + (compileError.message || 'Unknown error');
         }
-
-        // Clean up temp files
-        // try {
-        //     await fs.promises.unlink(texFilePath);
-        //     if (pdfBase64) await fs.promises.unlink(pdfFilePath);
-        // } catch (e) { console.error('Cleanup failed', e); }
 
         return NextResponse.json({
             tex: texContent,

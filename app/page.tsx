@@ -20,7 +20,7 @@ const AnimatedBackground = () => (
 );
 
 export default function Home() {
-  const [file, setFile] = useState<File | null>(null);
+  const [files, setFiles] = useState<File[]>([]);
   const [status, setStatus] = useState<'idle' | 'uploading' | 'processing' | 'success' | 'error'>('idle');
   const [message, setMessage] = useState('');
   const [downloads, setDownloads] = useState<{ tex: string | null; pdf: string | null }>({ tex: null, pdf: null });
@@ -55,7 +55,7 @@ export default function Home() {
 
   const handleFileSelect = (selectedFile: File) => {
     if (selectedFile.type === 'application/pdf') {
-      setFile(selectedFile);
+      setFiles(prev => [...prev, selectedFile]);
       setStatus('idle');
       setMessage('');
       setDownloads({ tex: null, pdf: null });
@@ -63,6 +63,10 @@ export default function Home() {
       setMessage('Please upload a PDF file.');
       setStatus('error');
     }
+  };
+
+  const removeFile = (index: number) => {
+    setFiles(prev => prev.filter((_, i) => i !== index));
   };
 
   const handleDrag = (e: React.DragEvent) => {
@@ -85,13 +89,13 @@ export default function Home() {
   };
 
   const handleProcess = async () => {
-    if (!file) return;
+    if (files.length === 0) return;
 
     setStatus('uploading');
-    setMessage('Uploading PDF...');
+    setMessage('Uploading PDFs...');
 
     const formData = new FormData();
-    formData.append('file', file);
+    files.forEach(f => formData.append('file', f));
 
     try {
       setStatus('processing');
@@ -142,7 +146,7 @@ export default function Home() {
   };
 
   const reset = () => {
-    setFile(null);
+    setFiles([]);
     setStatus('idle');
     setMessage('');
     setDownloads({ tex: null, pdf: null });
@@ -177,14 +181,14 @@ export default function Home() {
                 className="w-full text-center overflow-hidden"
               >
                 <div className="pt-2 space-y-4">
-                  <div className="inline-flex items-center justify-center p-3 mb-4 rounded-2xl bg-white/50 dark:bg-black/50 backdrop-blur-md shadow-sm ring-1 ring-zinc-900/5 dark:ring-zinc-100/10">
-                    <Sparkles className="h-6 w-6 text-indigo-500 mr-2" />
-                    <span className="font-semibold bg-gradient-to-r from-indigo-500 to-purple-600 bg-clip-text text-transparent">AI Exam Generator</span>
+                  <div className="inline-flex items-center justify-center p-2 mb-3 md:p-3 md:mb-4 rounded-2xl bg-white/50 dark:bg-black/50 backdrop-blur-md shadow-sm ring-1 ring-zinc-900/5 dark:ring-zinc-100/10">
+                    <Sparkles className="h-5 w-5 md:h-6 md:w-6 text-indigo-500 mr-2" />
+                    <span className="text-sm md:text-base font-semibold bg-gradient-to-r from-indigo-500 to-purple-600 bg-clip-text text-transparent">AI Exam Generator</span>
                   </div>
-                  <h1 className="text-3xl font-bold tracking-tight text-zinc-800 dark:text-zinc-100 whitespace-nowrap">
+                  <h1 className="text-xl md:text-3xl font-bold tracking-tight text-zinc-800 dark:text-zinc-100 whitespace-nowrap">
                     Transform your exams in seconds.
                   </h1>
-                  <p className="text-lg text-zinc-600 dark:text-zinc-400 max-w-lg mx-auto">
+                  <p className="text-sm md:text-lg text-zinc-600 dark:text-zinc-400 max-w-lg mx-auto">
                     Upload a past exam PDF. Our AI will analyze the structure and generate a fresh, unique version instantly.
                   </p>
                 </div>
@@ -202,12 +206,12 @@ export default function Home() {
             <div
               className={cn(
                 "h-full transition-[padding] duration-700 ease-[cubic-bezier(0.16,1,0.3,1)]",
-                status === 'success' ? "p-0" : "p-6 md:p-8 flex flex-col justify-center"
+                status === 'success' ? "p-0" : "p-4 md:p-8 flex flex-col justify-center"
               )}
             >
               <AnimatePresence mode="popLayout" initial={false}>
                 {/* IDLE / UPLOAD STATE */}
-                {status === 'idle' && !file && (
+                {status === 'idle' && files.length === 0 && (
                   <motion.div
                     key="upload"
                     initial={{ opacity: 0, scale: 0.95 }}
@@ -234,13 +238,13 @@ export default function Home() {
                         className="hidden"
                         onChange={handleFileChange}
                       />
-                      <div className="mb-4 rounded-full bg-indigo-50 p-4 dark:bg-indigo-900/30 group-hover:scale-110 transition-transform duration-200">
-                        <Upload className="h-8 w-8 text-indigo-600 dark:text-indigo-400" />
+                      <div className="mb-3 md:mb-4 rounded-full bg-indigo-50 p-2 md:p-4 dark:bg-indigo-900/30 group-hover:scale-110 transition-transform duration-200">
+                        <Upload className="h-5 w-5 md:h-8 md:w-8 text-indigo-600 dark:text-indigo-400" />
                       </div>
-                      <h3 className="text-lg font-semibold text-zinc-900 dark:text-zinc-100">
+                      <h3 className="text-sm md:text-lg font-semibold text-zinc-900 dark:text-zinc-100">
                         Click to upload or drag and drop
                       </h3>
-                      <p className="mt-2 text-sm text-zinc-500 dark:text-zinc-400">
+                      <p className="mt-2 text-xs md:text-sm text-zinc-500 dark:text-zinc-400">
                         PDF file (max 10MB)
                       </p>
                     </div>
@@ -248,14 +252,14 @@ export default function Home() {
                 )}
 
                 {/* FILE SELECTED STATE */}
-                {status === 'idle' && file && (
+                {status === 'idle' && files.length > 0 && (
                   <motion.div
                     key="file-selected"
                     initial={{ opacity: 0, scale: 0.95 }}
                     animate={{ opacity: 1, scale: 1 }}
                     exit={{ opacity: 0, scale: 0.95 }}
                     transition={{ type: "spring", stiffness: 260, damping: 20 }}
-                    className="flex flex-col items-center space-y-8 w-full"
+                    className="flex flex-col items-center space-y-6 w-full"
                   >
                     <div className="text-center space-y-2">
                       <h3 className="text-xl font-semibold text-zinc-800 dark:text-zinc-200">
@@ -264,33 +268,52 @@ export default function Home() {
                       <p className="text-zinc-500">Review your selection below</p>
                     </div>
 
-                    <div className="relative flex items-center gap-4 rounded-2xl bg-zinc-50 dark:bg-zinc-800/50 p-6 w-full max-w-md ring-1 ring-zinc-200 dark:ring-zinc-700 shadow-sm">
-                      <div className="rounded-xl bg-red-100 p-3 dark:bg-red-900/20">
-                        <FileText className="h-8 w-8 text-red-600 dark:text-red-400" />
-                      </div>
-                      <div className="flex-1 min-w-0 text-left">
-                        <p className="font-medium text-zinc-900 dark:text-zinc-100 truncate">{file.name}</p>
-                        <p className="text-sm text-zinc-500">{(file.size / 1024 / 1024).toFixed(2)} MB</p>
-                      </div>
+                    <div className="w-full max-w-md space-y-3">
+                      {files.map((f, idx) => (
+                        <div key={idx} className="relative flex items-center gap-3 rounded-xl bg-zinc-50 dark:bg-zinc-800/50 p-3 ring-1 ring-zinc-200 dark:ring-zinc-700 shadow-sm">
+                          <div className="rounded-lg bg-red-100 p-2 dark:bg-red-900/20">
+                            <FileText className="h-5 w-5 text-red-600 dark:text-red-400" />
+                          </div>
+                          <div className="flex-1 min-w-0 text-left">
+                            <p className="font-medium text-sm text-zinc-900 dark:text-zinc-100 truncate">{f.name}</p>
+                            <p className="text-xs text-zinc-500">{(f.size / 1024 / 1024).toFixed(2)} MB</p>
+                          </div>
+                          <button
+                            onClick={() => removeFile(idx)}
+                            className="p-1.5 rounded-full hover:bg-zinc-200 dark:hover:bg-zinc-700 transition-colors"
+                            title="Remove file"
+                          >
+                            <X className="h-4 w-4 text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200" />
+                          </button>
+                        </div>
+                      ))}
+
                       <button
-                        onClick={reset}
-                        className="p-2 rounded-full hover:bg-zinc-200 dark:hover:bg-zinc-700 transition-colors group"
-                        title="Remove file"
+                        onClick={() => inputRef.current?.click()}
+                        className="w-full flex items-center justify-center gap-2 rounded-xl border-2 border-dashed border-zinc-300 dark:border-zinc-700 p-3 text-sm font-medium text-zinc-600 dark:text-zinc-400 hover:border-indigo-500 hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors"
                       >
-                        <X className="h-5 w-5 text-zinc-400 group-hover:text-zinc-600 dark:group-hover:text-zinc-200" />
+                        <Upload className="h-4 w-4" />
+                        Add Another File
                       </button>
+                      <input
+                        ref={inputRef}
+                        type="file"
+                        accept=".pdf"
+                        className="hidden"
+                        onChange={handleFileChange}
+                      />
                     </div>
 
-                    <div className="flex gap-4 w-full max-w-md">
+                    <div className="flex gap-3 md:gap-4 w-full max-w-md text-sm md:text-base">
                       <button
                         onClick={reset}
-                        className="flex-1 rounded-xl px-6 py-4 font-semibold text-zinc-600 hover:bg-zinc-100 dark:text-zinc-400 dark:hover:bg-zinc-800 transition-colors"
+                        className="flex-1 rounded-xl px-3 py-2.5 md:px-6 md:py-4 font-semibold text-zinc-600 hover:bg-zinc-100 dark:text-zinc-400 dark:hover:bg-zinc-800 transition-colors"
                       >
                         Cancel
                       </button>
                       <button
                         onClick={handleProcess}
-                        className="flex-[2] rounded-xl bg-gradient-to-r from-indigo-600 to-purple-600 px-8 py-4 text-lg font-semibold text-white shadow-lg transition-all hover:scale-[1.02] hover:shadow-xl active:scale-[0.98]"
+                        className="flex-[2] rounded-xl bg-gradient-to-r from-indigo-600 to-purple-600 px-4 py-2.5 md:px-8 md:py-4 text-sm md:text-lg font-semibold text-white shadow-lg transition-all hover:scale-[1.02] hover:shadow-xl active:scale-[0.98]"
                       >
                         Generate Exam
                       </button>
@@ -394,19 +417,16 @@ export default function Home() {
                 transition={{ duration: 0.7, ease: [0.16, 1, 0.3, 1] }}
                 className="w-full flex flex-col items-center gap-6 overflow-hidden"
               >
-                <div className="flex items-center gap-2 rounded-full bg-green-100/50 backdrop-blur-md px-4 py-2 text-sm font-medium text-green-700 ring-1 ring-green-700/10 dark:bg-green-900/30 dark:text-green-300 dark:ring-green-400/20">
-                  <CheckCircle className="h-4 w-4" />
-                  Exam Generated Successfully
-                </div>
 
-                <div className="flex flex-wrap justify-center gap-4">
+
+                <div className="flex flex-wrap justify-center gap-3 md:gap-4">
                   {downloads.pdf && (
                     <a
                       href={downloads.pdf}
                       download="generated_exam.pdf"
-                      className="group flex items-center gap-2 rounded-xl bg-zinc-900 px-6 py-3 font-semibold text-white shadow-lg transition-all hover:bg-zinc-800 hover:scale-105 active:scale-95 dark:bg-white dark:text-zinc-900 dark:hover:bg-zinc-200"
+                      className="group flex items-center gap-2 rounded-xl bg-zinc-900 px-4 py-2 md:px-6 md:py-3 text-sm md:text-base font-semibold text-white shadow-lg transition-all hover:bg-zinc-800 active:scale-95 dark:bg-white dark:text-zinc-900 dark:hover:bg-zinc-200"
                     >
-                      <Download className="h-5 w-5 transition-transform group-hover:-translate-y-0.5" />
+                      <Download className="h-4 w-4 md:h-5 md:w-5" />
                       Download PDF
                     </a>
                   )}
@@ -414,17 +434,17 @@ export default function Home() {
                     <a
                       href={downloads.tex}
                       download="generated_exam.tex"
-                      className="group flex items-center gap-2 rounded-xl border border-zinc-200 bg-white/50 backdrop-blur-sm px-6 py-3 font-semibold text-zinc-900 shadow-sm transition-all hover:bg-white hover:border-zinc-300 hover:scale-105 active:scale-95 dark:border-zinc-700 dark:bg-black/50 dark:text-zinc-100 dark:hover:bg-zinc-900"
+                      className="group flex items-center gap-2 rounded-xl border border-zinc-200 bg-white/50 backdrop-blur-sm px-4 py-2 md:px-6 md:py-3 text-sm md:text-base font-semibold text-zinc-900 shadow-sm transition-all hover:bg-white hover:border-zinc-300 active:scale-95 dark:border-zinc-700 dark:bg-black/50 dark:text-zinc-100 dark:hover:bg-zinc-900"
                     >
-                      <File className="h-5 w-5 transition-transform group-hover:-translate-y-0.5" />
+                      <File className="h-4 w-4 md:h-5 md:w-5" />
                       Download TeX
                     </a>
                   )}
                   <button
                     onClick={reset}
-                    className="flex items-center gap-2 rounded-xl px-6 py-3 font-semibold text-zinc-600 transition-colors hover:bg-zinc-100 dark:text-zinc-400 dark:hover:bg-zinc-800/50"
+                    className="flex items-center gap-2 rounded-xl px-4 py-2 md:px-6 md:py-3 text-sm md:text-base font-semibold text-zinc-900 transition-colors hover:bg-zinc-100 dark:text-zinc-100 dark:hover:bg-zinc-800/50"
                   >
-                    <RefreshCw className="h-5 w-5" />
+                    <RefreshCw className="h-4 w-4 md:h-5 md:w-5" />
                     Reset
                   </button>
                 </div>
