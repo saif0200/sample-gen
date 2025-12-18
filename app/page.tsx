@@ -25,7 +25,8 @@ export default function Home() {
   const [message, setMessage] = useState('');
   const [downloads, setDownloads] = useState<{ tex: string | null; pdf: string | null }>({ tex: null, pdf: null });
   const [dragActive, setDragActive] = useState(false);
-  const inputRef = useRef<HTMLInputElement>(null);
+  const uploadInputRef = useRef<HTMLInputElement>(null);
+  const addMoreInputRef = useRef<HTMLInputElement>(null);
 
   // Loading text cycler
   const [loadingText, setLoadingText] = useState('Initializing AI...');
@@ -51,6 +52,8 @@ export default function Home() {
     if (e.target.files && e.target.files[0]) {
       handleFileSelect(e.target.files[0]);
     }
+    // Reset value to allow selecting the same file again
+    e.target.value = '';
   };
 
   const handleFileSelect = (selectedFile: File) => {
@@ -229,10 +232,10 @@ export default function Home() {
                       onDragLeave={handleDrag}
                       onDragOver={handleDrag}
                       onDrop={handleDrop}
-                      onClick={() => inputRef.current?.click()}
+                      onClick={() => uploadInputRef.current?.click()}
                     >
                       <input
-                        ref={inputRef}
+                        ref={uploadInputRef}
                         type="file"
                         accept=".pdf"
                         className="hidden"
@@ -289,14 +292,14 @@ export default function Home() {
                       ))}
 
                       <button
-                        onClick={() => inputRef.current?.click()}
+                        onClick={() => addMoreInputRef.current?.click()}
                         className="w-full flex items-center justify-center gap-2 rounded-xl border-2 border-dashed border-zinc-300 dark:border-zinc-700 p-3 text-sm font-medium text-zinc-600 dark:text-zinc-400 hover:border-indigo-500 hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors"
                       >
                         <Upload className="h-4 w-4" />
                         Add Another File
                       </button>
                       <input
-                        ref={inputRef}
+                        ref={addMoreInputRef}
                         type="file"
                         accept=".pdf"
                         className="hidden"
