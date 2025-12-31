@@ -28,6 +28,9 @@ export default function Home() {
   const uploadInputRef = useRef<HTMLInputElement>(null);
   const addMoreInputRef = useRef<HTMLInputElement>(null);
 
+  const [currentTex, setCurrentTex] = useState('');
+  const [sourceQuestions, setSourceQuestions] = useState<string[]>([]);
+
   // Loading text cycler
   const [loadingText, setLoadingText] = useState('Initializing AI...');
   useEffect(() => {
@@ -62,6 +65,8 @@ export default function Home() {
       setStatus('idle');
       setMessage('');
       setDownloads({ tex: null, pdf: null });
+      setCurrentTex('');
+      setSourceQuestions([]);
     } else {
       setMessage('Please upload a PDF file.');
       setStatus('error');
@@ -91,14 +96,25 @@ export default function Home() {
     }
   };
 
-  const handleProcess = async () => {
+  const handleProcess = async (isRegenerate: boolean = false) => {
     if (files.length === 0) return;
 
-    setStatus('uploading');
-    setMessage('Uploading PDFs...');
+    setStatus(isRegenerate ? 'processing' : 'uploading');
+    if (!isRegenerate) {
+      setMessage('Uploading PDFs...');
+    }
 
     const formData = new FormData();
     files.forEach(f => formData.append('file', f));
+    if (isRegenerate) {
+      formData.append('regenerate', 'true');
+      if (currentTex) {
+        formData.append('previousContext', currentTex);
+      }
+      if (sourceQuestions.length > 0) {
+        formData.append('questions', JSON.stringify(sourceQuestions));
+      }
+    }
 
     try {
       setStatus('processing');
@@ -118,6 +134,19 @@ export default function Home() {
       // TeX download
       const texBlob = new Blob([data.tex], { type: 'text/plain' });
       const texUrl = window.URL.createObjectURL(texBlob);
+
+      // OPTIMIZATON: Strip preamble and boilerplate to save tokens for next regeneration
+      const fullTex = data.tex as string;
+      const bodyMatch = fullTex.match(/\\begin\{document\}([\s\S]*?)\\end\{document\}/i);
+      const cleanTex = bodyMatch ? bodyMatch[1].trim() : fullTex;
+      setCurrentTex(cleanTex);
+
+      // Update source questions if returned (usually from first run)
+      if (data.questions && data.questions.length > 0) {
+        setSourceQuestions(data.questions);
+      } else if (!isRegenerate && data.questions) {
+        setSourceQuestions(data.questions);
+      }
 
       // PDF download
       let pdfUrl = null;
@@ -262,64 +291,79 @@ export default function Home() {
                     animate={{ opacity: 1, scale: 1 }}
                     exit={{ opacity: 0, scale: 0.95 }}
                     transition={{ type: "spring", stiffness: 260, damping: 20 }}
-                    className="flex flex-col items-center space-y-6 w-full"
+                    className="relative flex flex-col h-full w-full"
                   >
-                    <div className="text-center space-y-2">
+                    {/* Fixed Header */}
+                    <div className="text-center space-y-2 mb-6">
                       <h3 className="text-xl font-semibold text-zinc-800 dark:text-zinc-200">
                         Ready to generate?
                       </h3>
                       <p className="text-zinc-500">Review your selection below</p>
                     </div>
 
-                    <div className="w-full max-w-md space-y-3">
-                      {files.map((f, idx) => (
-                        <div key={idx} className="relative flex items-center gap-3 rounded-xl bg-zinc-50 dark:bg-zinc-800/50 p-3 ring-1 ring-zinc-200 dark:ring-zinc-700 shadow-sm">
-                          <div className="rounded-lg bg-red-100 p-2 dark:bg-red-900/20">
-                            <FileText className="h-5 w-5 text-red-600 dark:text-red-400" />
-                          </div>
-                          <div className="flex-1 min-w-0 text-left">
-                            <p className="font-medium text-sm text-zinc-900 dark:text-zinc-100 truncate">{f.name}</p>
-                            <p className="text-xs text-zinc-500">{(f.size / 1024 / 1024).toFixed(2)} MB</p>
-                          </div>
-                          <button
-                            onClick={() => removeFile(idx)}
-                            className="p-1.5 rounded-full hover:bg-zinc-200 dark:hover:bg-zinc-700 transition-colors"
-                            title="Remove file"
+                    {/* Scrollable File List Container */}
+                    <div className="flex-1 flex flex-col items-center overflow-hidden w-full">
+                      <div className="w-full max-w-md space-y-3 mb-6">
+                        <div className="relative px-2">
+                          <div
+                            className="space-y-3 max-h-48 overflow-y-auto px-2 py-4 pr-5 scroll-smooth"
+                            style={{
+                              maskImage: 'linear-gradient(to bottom, transparent, black 24px, black calc(100% - 24px), transparent)',
+                              WebkitMaskImage: 'linear-gradient(to bottom, transparent, black 24px, black calc(100% - 24px), transparent)'
+                            }}
                           >
-                            <X className="h-4 w-4 text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200" />
-                          </button>
+                            {files.map((f, idx) => (
+                              <div key={idx} className="relative flex items-center gap-3 rounded-xl bg-zinc-50 dark:bg-zinc-800/50 p-3 ring-1 ring-zinc-200 dark:ring-zinc-700 shadow-sm transition-all hover:ring-indigo-500/30">
+                                <div className="rounded-lg bg-red-100 p-2 dark:bg-red-900/20">
+                                  <FileText className="h-5 w-5 text-red-600 dark:text-red-400" />
+                                </div>
+                                <div className="flex-1 min-w-0 text-left">
+                                  <p className="font-medium text-sm text-zinc-900 dark:text-zinc-100 truncate">{f.name}</p>
+                                  <p className="text-xs text-zinc-500">{(f.size / 1024 / 1024).toFixed(2)} MB</p>
+                                </div>
+                                <button
+                                  onClick={() => removeFile(idx)}
+                                  className="p-1.5 rounded-full hover:bg-zinc-200 dark:hover:bg-zinc-700 transition-colors"
+                                  title="Remove file"
+                                >
+                                  <X className="h-4 w-4 text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200" />
+                                </button>
+                              </div>
+                            ))}
+                          </div>
                         </div>
-                      ))}
 
-                      <button
-                        onClick={() => addMoreInputRef.current?.click()}
-                        className="w-full flex items-center justify-center gap-2 rounded-xl border-2 border-dashed border-zinc-300 dark:border-zinc-700 p-3 text-sm font-medium text-zinc-600 dark:text-zinc-400 hover:border-indigo-500 hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors"
-                      >
-                        <Upload className="h-4 w-4" />
-                        Add Another File
-                      </button>
-                      <input
-                        ref={addMoreInputRef}
-                        type="file"
-                        accept=".pdf"
-                        className="hidden"
-                        onChange={handleFileChange}
-                      />
-                    </div>
+                        <button
+                          onClick={() => addMoreInputRef.current?.click()}
+                          className="w-full flex items-center justify-center gap-2 rounded-xl border-2 border-dashed border-zinc-300 dark:border-zinc-700 p-3 text-sm font-medium text-zinc-600 dark:text-zinc-400 hover:border-indigo-500 hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors"
+                        >
+                          <Upload className="h-4 w-4" />
+                          Add Another File
+                        </button>
+                        <input
+                          ref={addMoreInputRef}
+                          type="file"
+                          accept=".pdf"
+                          className="hidden"
+                          onChange={handleFileChange}
+                        />
+                      </div>
 
-                    <div className="flex gap-3 md:gap-4 w-full max-w-md text-sm md:text-base">
-                      <button
-                        onClick={reset}
-                        className="flex-1 rounded-xl px-3 py-2.5 md:px-6 md:py-4 font-semibold text-zinc-600 hover:bg-zinc-100 dark:text-zinc-400 dark:hover:bg-zinc-800 transition-colors"
-                      >
-                        Cancel
-                      </button>
-                      <button
-                        onClick={handleProcess}
-                        className="flex-[2] rounded-xl bg-gradient-to-r from-indigo-600 to-purple-600 px-4 py-2.5 md:px-8 md:py-4 text-sm md:text-lg font-semibold text-white shadow-lg transition-all hover:scale-[1.02] hover:shadow-xl active:scale-[0.98]"
-                      >
-                        Generate Exam
-                      </button>
+                      {/* Fixed Action Buttons */}
+                      <div className="flex gap-3 md:gap-4 w-full max-w-md text-sm md:text-base">
+                        <button
+                          onClick={reset}
+                          className="flex-1 rounded-xl px-3 py-2.5 md:px-6 md:py-4 font-semibold text-zinc-600 hover:bg-zinc-100 dark:text-zinc-400 dark:hover:bg-zinc-800 transition-colors"
+                        >
+                          Cancel
+                        </button>
+                        <button
+                          onClick={() => handleProcess(false)}
+                          className="flex-[2] rounded-xl bg-gradient-to-r from-indigo-600 to-purple-600 px-4 py-2.5 md:px-8 md:py-4 text-sm md:text-lg font-semibold text-white shadow-lg transition-all hover:scale-[1.02] hover:shadow-xl active:scale-[0.98]"
+                        >
+                          Generate Exam
+                        </button>
+                      </div>
                     </div>
                   </motion.div>
                 )}
@@ -449,6 +493,13 @@ export default function Home() {
                   >
                     <RefreshCw className="h-4 w-4 md:h-5 md:w-5" />
                     Reset
+                  </button>
+                  <button
+                    onClick={() => handleProcess(true)}
+                    className="flex items-center gap-2 rounded-xl bg-gradient-to-r from-indigo-600 to-purple-600 px-4 py-2 md:px-6 md:py-3 text-sm md:text-base font-semibold text-white shadow-lg transition-all hover:scale-[1.02] hover:shadow-xl active:scale-[0.98]"
+                  >
+                    <RefreshCw className="h-4 w-4 md:h-5 md:w-5" />
+                    Regenerate
                   </button>
                 </div>
               </motion.div>

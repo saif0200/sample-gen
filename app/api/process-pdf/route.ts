@@ -39,7 +39,23 @@ export async function POST(req: NextRequest) {
         // Initialize Gemini using @google/genai
         const client = new GoogleGenAI({ apiKey });
 
-        console.log(`Generating content with Gemini from ${files.length} PDF(s)...`);
+        console.log('\n┌──────────────────────────────────────────────────┐');
+        console.log('│ [API] NEW REQUEST: /api/process-pdf               │');
+        console.log('└──────────────────────────────────────────────────┘');
+        console.log(`│ Files Received: ${files.length} PDF(s)`);
+
+        const isRegenerate = formData.get('regenerate') === 'true';
+        const hasContext = !!formData.get('previousContext');
+        const hasQuestions = !!formData.get('questions');
+
+        console.log(`│ Regeneration: ${isRegenerate ? 'YES' : 'NO'}`);
+        if (isRegenerate) {
+            console.log(`│    ├─ Context Provided: ${hasContext ? 'YES' : 'NO'}`);
+            console.log(`│    └─ Questions List: ${hasQuestions ? 'YES' : 'NO'}`);
+        }
+
+        console.log('│ Sending to Gemini...');
+        const startTime = Date.now();
 
         // Correct usage for @google/genai
         const result = await client.models.generateContent({
@@ -47,9 +63,10 @@ export async function POST(req: NextRequest) {
             config: {
                 temperature: 0.4,
                 thinkingConfig: {
-                    // @ts-expect-error: Library types do not yet support MINIMAL
-                    thinkingLevel: 'MINIMAL'
-                },
+                    includeThoughts: true,
+                    // @ts-expect-error: thinkingLevel is the new parameter for Gemini 3
+                    thinkingLevel: 'low'
+                }
             },
             contents: [
                 {
@@ -57,51 +74,86 @@ export async function POST(req: NextRequest) {
                     parts: [
                         ...pdfParts,
                         {
-                            text: `You are an elite Professor creating a rigorous practice exam.
+                            text: `ROLE: Elite Professor.
+GOAL: Create ONE unified, novel practice exam based on provided material.
 
-### CONTEXT
-The student has ALREADY SOLVED all questions in the provided PDF(s). They are running out of practice material and strictly need NEW challenges.
-Your job is to generate a fresh exam that tests the same concepts to verify true mastery, not just memorization of the old questions.
+SOURCE PROTOCOL:
+- Content: User has solved source PDF questions. Generate NEW variants testing identical logic.
+- Total Synthesis: Analyze ALL source files. Select mix of ~15-20 questions (standard exam length).
+- Selection: Prioritize high-impact/distinct concepts over simple repetition.
 
-### MISSION
-Create ONE SINGLE, UNIFIED practice exam that synthesizes concepts from ALL provided PDF(s).
-The resulting exam must be a seamless integration of topics, appearing as if it were the "next year's" or "final" version of the provided exams.
+${isRegenerate ? `
+REGEN PROTOCOL (ACTIVE):
+- History: User solved a previous attempt. DO NOT reuse values, wording, or structure.
+- Variance: Change order, mix concepts, vary part counts.
+- Previous Attempt:
+\`\`\`latex
+${(formData.get('previousContext') as string).substring(0, 15000)}
+\`\`\`
+` : ''}
 
-### CRITICAL RULES
-1. **Single Unified Exam**: Regardless of the number of input files, generate exactly ONE exam document. Do NOT separate the exam into "File 1" and "File 2" sections. The questions should flow logically by topic, not by source file.
-2. **Deep Synthesis**:
-   - Analyze ALL files to build a holistic understanding of the subject matter.
-   - If files have overlapping content, merge them into deeper, more complex questions rather than repeating simple concepts.
-   - Ensure NO overlapping or redundant questions. Each problem must test a distinct aspect of the combined, comprehensive syllabus.
-3. **Novelty & Rigor**:
-   - **Anti-Repetition**: Since the student has seen the original questions, any similarity will be spotted immediately. AVOID superficial rephrasing.
-   - Create BRAND NEW questions. Change contexts, function types (e.g., trig → exp), and variables.
-   - **Increase Complexity**: NEVER make a question easier. If in doubt, increase complexity slightly.
-   - **Master Logic**: Focus on testing the underlying principles.
-4. **Formatting mimicry**:
-   - **Maintain Format**: Detect and COPY the exact formatting style, layout, and structure of the input PDF(s). Do NOT add new headers, title pages, or sections unless they exist in the source.
-   - **No MCQ Splits**: Wrap EACH MCQ block and its options in a \\begin{minipage}{\\linewidth} ... \\end{minipage} to prevent page breaks.
-   - No hints, specific advice, or conversational filler. ONLY the exam content.
+${formData.get('questions') ? `
+SOURCE BLUEPRINT (MANDATORY):
+- Target these specific types: [${JSON.parse(formData.get('questions') as string).join(', ')}]
+- Strategy: Create fresh instances for each type. Change context/functions/values.
+` : ''}
 
-### OUTPUT REQUIREMENTS
-- Return **ONLY** valid, standalone LaTeX code.
-- Start strictly with \\documentclass and end with \\end{document}.
-- Do NOT include markdown code blocks (like \`\`\`latex) or introductory text.`
+STRICT CONSTRAINTS:
+1. NO DUPLICATES: Question content must diverge significantly from ALL sources.
+2. COMPLEXITY: Never easier. Maintain or slightly increase mathematical/logical rigor.
+3. SINGLE DOCUMENT: One unified LaTeX outcome. Flow by topic, not by source file.
+4. DOCUMENT FORMAT: Exact mimicry of source LaTeX style, layout, and packages.
+5. NO CHATTER: Zero conversational text, zero markdown blocks. Return LaTeX only.
+6. STABILITY: Wrap MCQs in \`minipage{\\linewidth}\` to prevent page breaks.
+
+OUTPUT FORMAT:
+- Start: \\documentclass
+- End: \\end{document}
+- FOOTER (MANDATORY): After \\end{document}, list EVERY source question type found:
+[[QUESTION_TYPES: Type 1, Type 2, ...]]`
                         },
                     ],
                 },
             ],
         });
 
+        const duration = ((Date.now() - startTime) / 1000).toFixed(2);
+        console.log(`│ Gemini Response Received (${duration}s)`);
+
         // Handle response logic
         const r = result as any;
+
+        // Extract Thoughts if present
+        const candidate = r.candidates?.[0];
+        if (candidate?.content?.parts?.some((p: any) => p.thought)) {
+            console.log('│ Thoughts Generated: YES');
+            // We could log them, but they might be long. Let's log the first 200 chars to confirm.
+            const thoughtPart = candidate.content.parts.find((p: any) => p.thought);
+            if (thoughtPart) {
+                console.log(`│    preview: "${thoughtPart.text?.substring(0, 100)}..."`);
+            }
+        }
+
         let responseText =
             typeof r.text === 'function' ? r.text() :
                 r.response?.text?.() ||
-                r.candidates?.[0]?.content?.parts?.[0]?.text ||
+                candidate?.content?.parts?.find((p: any) => !p.thought)?.text ||
                 '';
 
-        console.log('Gemini response received. Length:', responseText.length);
+        console.log(`│ Raw Length: ${responseText.length} chars`);
+
+        // Parsing Question Types
+        let detectedQuestions: string[] = [];
+        const questionsMatch = responseText.match(/\[\[QUESTION_TYPES:([\s\S]*?)\]\]/);
+        if (questionsMatch) {
+            detectedQuestions = questionsMatch[1].split(',').map((t: string) => t.trim()).filter(Boolean);
+            // Remove the block from the text to keep LaTeX clean
+            responseText = responseText.replace(questionsMatch[0], '');
+            console.log(`│ Detected Questions: [${detectedQuestions.length} Items]`);
+            // detectedQuestions.forEach(q => console.log(`│    - ${q}`)); // Uncommon if list is long
+        } else {
+            console.log('│ No QUESTION_TYPES block found.');
+        }
 
         // Robust LaTeX Extraction
         let texContent = responseText.trim();
@@ -109,14 +161,19 @@ The resulting exam must be a seamless integration of topics, appearing as if it 
         // Strategy 1: Look for markdown code blocks
         const codeBlockMatch = responseText.match(/```(?:latex|tex)?\n?([\s\S]*?)```/i);
         if (codeBlockMatch) {
+            console.log('│ Strategy: Markdown Block Extraction');
             texContent = codeBlockMatch[1].trim();
         } else {
             // Strategy 2: Find the main LaTeX document structure
             const docMatch = responseText.match(/(\\documentclass[\s\S]*?\\end\{document\})/i);
             if (docMatch) {
+                console.log('│ Strategy: Document Structure Match');
                 texContent = docMatch[1].trim();
+            } else {
+                console.log('│ Strategy: Raw Text Fallback (Risk of formatting issues)');
             }
         }
+
 
         // Final cleanup of extra chatter that might be outside backticks or doc
         if (!texContent.startsWith('\\documentclass')) {
@@ -139,13 +196,14 @@ The resulting exam must be a seamless integration of topics, appearing as if it 
         const pdfFilePath = path.join(tempDir, `exam_${runId}.pdf`);
 
         await fs.promises.writeFile(texFilePath, texContent);
+        console.log(`│ TeX Saved: ${texFilePath}`);
 
         let pdfBase64: string | null = null;
         let pdfError = null;
 
         // Attempt to compile with pdflatex
         try {
-            console.log(`Compiling TeX at ${texFilePath}...`);
+            console.log('│ Compiling PDF...');
             await execAsync(`pdflatex -interaction=nonstopmode -output-directory="${tempDir}" "${texFilePath}"`, {
                 env: {
                     ...process.env,
@@ -156,22 +214,28 @@ The resulting exam must be a seamless integration of topics, appearing as if it 
             if (fs.existsSync(pdfFilePath)) {
                 const pdfBuffer = await fs.promises.readFile(pdfFilePath);
                 pdfBase64 = pdfBuffer.toString('base64');
+                console.log('│ PDF Created Successfully');
             } else {
                 throw new Error('PDF file not created');
             }
         } catch (compileError: any) {
-            console.error('PDF Compilation failed:', compileError);
+            console.error('│ PDF Compilation Failed');
+            // console.error(compileError); // Keep clean logs, maybe verify if needed
             pdfError = 'PDF compilation failed: ' + (compileError.message || 'Unknown error');
         }
+
+        console.log('└──────────────────────────────────────────────────┘\n');
 
         return NextResponse.json({
             tex: texContent,
             pdfBase64: pdfBase64,
+            questions: detectedQuestions,
             error: pdfError
         });
 
     } catch (error: any) {
-        console.error('Error processing request:', error);
+        console.error('│ CRITICAL ERROR:', error);
+        console.log('└──────────────────────────────────────────────────┘\n');
         return NextResponse.json({ error: error.message }, { status: 500 });
     }
 }
